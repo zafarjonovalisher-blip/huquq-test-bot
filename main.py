@@ -16,10 +16,9 @@ from aiogram.types import (
 from aiohttp import web
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
-# Bot tokeni
+# ==================== SOZLAMALAR ====================
 TOKEN = "8872988314:AAGkQS8PDLkR9qfLlz3EYPBbOt2IBjUwKAY"
 
-# Render avtomatik beradigan URL yoki o'zingizning veb-server manzilingiz
 WEBHOOK_HOST = os.getenv("RENDER_EXTERNAL_URL", "https://huquq-test-bot.onrender.com")
 WEBHOOK_PATH = f"/webhook/{TOKEN}"
 WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
@@ -31,11 +30,14 @@ logging.basicConfig(level=logging.INFO)
 bot = Bot(token=TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
-class RegState(StatesGroup):
+# ==================== HOLATLAR (FSM) ====================
+class TestStates(StatesGroup):
     waiting_for_phone = State()
     waiting_for_full_name = State()
     ready_for_test = State()
+    in_test = State()
 
+# ==================== TEST SAVOLLARI ====================
 QUESTIONS = [
     {
         "text": "1. O‘zbekiston Respublikasi Konstitutsiyasi qanday yuridik kuchga ega?",
@@ -114,6 +116,8 @@ QUESTIONS = [
     }
 ]
 
+# ==================== HANDLERLAR ====================
+
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message, state: FSMContext):
     await state.clear()
@@ -127,9 +131,9 @@ async def cmd_start(message: types.Message, state: FSMContext):
         "Davom etish uchun pastdagi tugma orqali telefon raqamingizni yuboring:",
         reply_markup=phone_keyboard
     )
-    await state.set_state(RegState.waiting_for_phone)
+    await state.set_state(TestStates.waiting_for_phone)
 
-@dp.message(RegState.waiting_for_phone, F.contact)
+@dp.message(TestStates.waiting_for_phone, F.contact)
 async def process_phone(message: types.Message, state: FSMContext):
     phone = message.contact.phone_number
     await state.update_data(phone=phone)
@@ -139,13 +143,13 @@ async def process_phone(message: types.Message, state: FSMContext):
         reply_markup=ReplyKeyboardRemove(),
         parse_mode="Markdown"
     )
-    await state.set_state(RegState.waiting_for_full_name)
+    await state.set_state(TestStates.waiting_for_full_name)
 
-@dp.message(RegState.waiting_for_phone)
+@dp.message(TestStates.waiting_for_phone)
 async def process_phone_invalid(message: types.Message):
-    await message.answer("Iltimos, pastdagi **'📱 Telefon raqamni yuborish'** tugmasini bosing.")
+    await message.answer("Iltimos, pastdagi **'📱 Telefon raqamni yuborish'** tugmasini bosing.", parse_mode="Markdown")
 
-@dp.message(RegState.waiting_for_full_name)
+@dp.message(TestStates.waiting_for_full_name)
 async def process_full_name(message: types.Message, state: FSMContext):
     full_name = message.text.strip()
     await state.update_data(full_name=full_name)
@@ -161,12 +165,12 @@ async def process_full_name(message: types.Message, state: FSMContext):
         reply_markup=test_start_keyboard,
         parse_mode="Markdown"
     )
-    await state.set_state(RegState.ready_for_test)
+    await state.set_state(TestStates.ready_for_test)
 
-@dp.message(RegState.ready_for_test, F.text == "⚖️ Huquq testini boshlash")
-@dp.message(F.text == "⚖️ Huquq testini boshlash")
+@dp.message(TestStates.ready_for_test, F.text == "⚖️ Huquq testini boshlash")
 async def start_quiz(message: types.Message, state: FSMContext):
     await state.update_data(q_index=0, score=0)
+    await state.set_state(TestStates.in_test)
     await send_question(message, 0)
 
 async def send_question(message_or_call, q_index: int):
@@ -184,7 +188,7 @@ async def send_question(message_or_call, q_index: int):
     else:
         await message_or_call.message.answer(text, reply_markup=markup, parse_mode="Markdown")
 
-@dp.callback_query(F.data.startswith("ans_"))
+@dp.callback_query(TestStates.in_test, F.data.startswith("ans_"))
 async def handle_answer(call: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
     current_q_index = data.get("q_index", 0)
@@ -194,7 +198,7 @@ async def handle_answer(call: types.CallbackQuery, state: FSMContext):
     q_idx = int(q_idx)
     
     if q_idx != current_q_index:
-        await call.answer("Siz bu savolga javob bergansiz!", show_alert=True)
+        await call.answer("Siz bu savolga allaqachon javob bergansiz!", show_alert=True)
         return
     
     q = QUESTIONS[q_idx]
@@ -236,15 +240,16 @@ async def handle_answer(call: types.CallbackQuery, state: FSMContext):
         )
         await state.clear()
 
+# ==================== WEBHOOK VA SERVER ====================
+
 async def on_startup(bot: Bot):
     await bot.set_webhook(WEBHOOK_URL)
-    logging.info(f"Webhook o'rnatildi: {WEBHOOK_URL}")
+    logging.info(f"Webhook muvaffaqiyatli o'rnatildi: {WEBHOOK_URL}")
 
 async def on_shutdown(bot: Bot):
     await bot.delete_webhook()
     logging.info("Webhook o'chirildi")
 
-# UptimeRobot 404 xatosi bermasligi uchun asosiy sahifa
 async def handle_root(request):
     return web.Response(text="Bot is running successfully!")
 
@@ -253,7 +258,7 @@ def main():
     dp.shutdown.register(on_shutdown)
 
     app = web.Application()
-    app.router.add_get("/", handle_root) # 404 oldini olish uchun
+    app.router.add_get("/", handle_root)
     
     webhook_requests_handler = SimpleRequestHandler(
         dispatcher=dp,
