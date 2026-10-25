@@ -134,7 +134,7 @@ async def process_phone(message: types.Message, state: FSMContext):
     await state.update_data(phone=phone)
     
     await message.answer(
-        "Raqamingiz qabul qilindi ✅\nEndi **Ism va Familiyangizni** kiriting (masalan: Alisher Zafarjonov):",
+        "Raqamingiz qabul qilindi ✅\nEndi **Ism va Familiyangizni** kiriting",
         reply_markup=ReplyKeyboardRemove(),
         parse_mode="Markdown"
     )
