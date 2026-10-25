@@ -20,7 +20,7 @@ from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_applicati
 TOKEN = "8872988314:AAGkQS8PDLkR9qfLlz3EYPBbOt2IBjUwKAY"
 
 # Render avtomatik beradigan URL yoki o'zingizning veb-server manzilingiz
-WEBHOOK_HOST = os.getenv("RENDER_EXTERNAL_URL", "https://sizning-domen.onrender.com")
+WEBHOOK_HOST = os.getenv("RENDER_EXTERNAL_URL", "https://huquq-test-bot.onrender.com")
 WEBHOOK_PATH = f"/webhook/{TOKEN}"
 WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
 
@@ -116,6 +116,7 @@ QUESTIONS = [
 
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message, state: FSMContext):
+    await state.clear()
     phone_keyboard = ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text="📱 Telefon raqamni yuborish", request_contact=True)]],
         resize_keyboard=True,
@@ -134,7 +135,7 @@ async def process_phone(message: types.Message, state: FSMContext):
     await state.update_data(phone=phone)
     
     await message.answer(
-        "Raqamingiz qabul qilindi ✅\nEndi **Ism va Familiyangizni** kiriting",
+        "Raqamingiz qabul qilindi ✅\nEndi **Ism va Familiyangizni** kiriting:",
         reply_markup=ReplyKeyboardRemove(),
         parse_mode="Markdown"
     )
@@ -233,6 +234,7 @@ async def handle_answer(call: types.CallbackQuery, state: FSMContext):
             reply_markup=restart_keyboard,
             parse_mode="Markdown"
         )
+        await state.clear()
 
 async def on_startup(bot: Bot):
     await bot.set_webhook(WEBHOOK_URL)
@@ -242,11 +244,17 @@ async def on_shutdown(bot: Bot):
     await bot.delete_webhook()
     logging.info("Webhook o'chirildi")
 
+# UptimeRobot 404 xatosi bermasligi uchun asosiy sahifa
+async def handle_root(request):
+    return web.Response(text="Bot is running successfully!")
+
 def main():
     dp.startup.register(on_startup)
     dp.shutdown.register(on_shutdown)
 
     app = web.Application()
+    app.router.add_get("/", handle_root) # 404 oldini olish uchun
+    
     webhook_requests_handler = SimpleRequestHandler(
         dispatcher=dp,
         bot=bot,
